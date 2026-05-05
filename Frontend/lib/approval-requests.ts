@@ -3,18 +3,36 @@ export type ApprovalStatus =
   | "Finance Review"
   | "Leadership Review"
   | "Changes Requested"
-  | "Approved";
+  | "Approved"
+  | "Cancelled";
 
 export type ApprovalRequest = {
   id: string;
   title: string;
   submittedBy: string;
+  approverEmail?: string;
+  approverName?: string;
   fromLocation: string;
   toLocation: string;
   route: string;
   travelDates: string;
   roomRequirement: string;
   travelers: string[];
+  bookingDetails?: {
+    flight?: {
+      airline: string;
+      from: string;
+      to: string;
+      duration: string;
+      price: number;
+    };
+    stay?: {
+      name: string;
+      details: string;
+      price: string;
+    };
+    requestedAddOns?: string[];
+  };
   reason: string;
   status: ApprovalStatus;
   requestedAt: string;
@@ -23,14 +41,18 @@ export type ApprovalRequest = {
 
 export type TravelRequestInput = {
   submittedBy: string;
+  approverEmail: string;
+  approverName: string;
   travelers: string[];
   fromLocation: string;
   toLocation: string;
   travelDates: string;
   roomRequirement: string;
+  bookingDetails?: ApprovalRequest["bookingDetails"];
   reason: string;
 };
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 const STORAGE_KEY = "approvalRequests";
 
 const seedApprovalRequests: ApprovalRequest[] = [
@@ -130,12 +152,15 @@ export function submitTravelRequest(input: TravelRequestInput) {
     id: `approval-${Date.now()}`,
     title: `${input.toLocation} travel request`,
     submittedBy: input.submittedBy,
+    approverEmail: input.approverEmail,
+    approverName: input.approverName,
     fromLocation: input.fromLocation.trim(),
     toLocation: input.toLocation.trim(),
     route: buildRoute(input.fromLocation, input.toLocation),
     travelDates: input.travelDates.trim(),
     roomRequirement: input.roomRequirement.trim(),
     travelers: input.travelers,
+    bookingDetails: input.bookingDetails,
     reason: input.reason.trim(),
     status: "Pending",
     requestedAt: new Date().toLocaleDateString("en-US", {
@@ -172,5 +197,69 @@ export function updateApprovalRequest(
   });
 
   saveApprovalRequests(nextRequests);
+  return nextRequests;
+}
+
+async function parseApiResponse<T>(response: Response) {
+  const result = (await response.json()) as T & { error?: string };
+
+  if (!response.ok) {
+    throw new Error(result.error ?? "Request failed");
+  }
+
+  return result;
+}
+
+export async function fetchApprovalRequests(email?: string) {
+  if (!email) {
+    return getApprovalRequests();
+  }
+
+  try {
+    const query = new URLSearchParams({ email });
+    const response = await fetch(
+      `${API_URL.replace(/\/$/, "")}/approval-requests?${query.toString()}`,
+    );
+    const result = await parseApiResponse<{ requests: ApprovalRequest[] }>(response);
+    saveApprovalRequests(result.requests);
+    return result.requests;
+  } catch {
+    return getApprovalRequests();
+  }
+}
+
+export async function createApprovalRequest(input: TravelRequestInput) {
+  const response = await fetch(`${API_URL.replace(/\/$/, "")}/approval-requests`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+  const result = await parseApiResponse<{ request: ApprovalRequest }>(response);
+  saveApprovalRequests([result.request, ...getApprovalRequests()]);
+  return result.request;
+}
+
+export async function saveApprovalRequestUpdate(
+  id: string,
+  updates: Partial<ApprovalRequest>,
+  actorEmail?: string,
+) {
+  const response = await fetch(
+    `${API_URL.replace(/\/$/, "")}/approval-requests/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...updates,
+        actorEmail,
+      }),
+    },
+  );
+  const result = await parseApiResponse<{ request: ApprovalRequest }>(response);
+  const nextRequests = updateApprovalRequest(id, result.request);
   return nextRequests;
 }

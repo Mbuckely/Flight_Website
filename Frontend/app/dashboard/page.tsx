@@ -6,21 +6,15 @@ import Link from "next/link";
 import CountUp from "react-countup";
 import Sidebar from "@/components/layout/Sidebar";
 import {
-  getApprovalRequests,
+  fetchApprovalRequests,
   type ApprovalRequest,
 } from "@/lib/approval-requests";
-import { getStoredUser, isApprover } from "@/lib/auth";
+import { getStoredUser, refreshStoredUserProfile } from "@/lib/auth";
 import {
   getTripStartDate,
   isRequestOwnedByUser,
   sortTripsByStartDate,
 } from "@/lib/travel";
-
-function formatUserName() {
-  const currentUser = getStoredUser();
-
-  return currentUser?.name?.trim() || currentUser?.email?.split("@")[0] || "Traveler";
-}
 
 function getUpcomingTrips(trips: ApprovalRequest[]) {
   const today = new Date();
@@ -67,15 +61,25 @@ export default function DashboardPage() {
       router.push("/login");
     }
 
-    const syncDashboard = () => {
-      const currentUser = getStoredUser();
-      setApprovalRequests(getApprovalRequests());
-      setCanApprove(isApprover());
-      setUserName(formatUserName());
+    const syncDashboard = async () => {
+      const currentUser = await refreshStoredUserProfile();
+      const role = currentUser?.role;
+      const canUserApprove = role === "approver" || role === "manager";
+
+      setCanApprove(canUserApprove);
+      setUserName(
+        currentUser?.name?.trim() ||
+          currentUser?.email?.split("@")[0] ||
+          "Traveler",
+      );
 
       if (!currentUser) {
         router.push("/login");
+        return;
       }
+
+      const requests = await fetchApprovalRequests(currentUser.email);
+      setApprovalRequests(requests);
     };
 
     window.addEventListener("approvalchange", syncDashboard);
@@ -95,6 +99,9 @@ export default function DashboardPage() {
   );
   const approvedTrips = approvalRequests.filter(
     (request) => request.status === "Approved",
+  );
+  const changesRequested = approvalRequests.filter(
+    (request) => request.status === "Changes Requested",
   );
   const visibleTrips = canApprove
     ? sortTripsByStartDate(approvedTrips)
@@ -345,6 +352,30 @@ export default function DashboardPage() {
               </p>
             </section>
 
+            {changesRequested.length > 0 && (
+              <section className="rounded-[2rem] border border-amber-200 bg-amber-50 p-6 shadow-sm">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
+                  Changes Requested
+                </p>
+                <div className="mt-4 grid gap-3">
+                  {changesRequested.map((request) => (
+                    <article
+                      key={request.id}
+                      className="rounded-2xl bg-white px-5 py-4 text-slate-700"
+                    >
+                      <p className="font-semibold text-slate-900">
+                        {request.title}
+                      </p>
+                      <p className="mt-1 text-sm">
+                        Your approver requested changes for {request.route}. Open
+                        the request details before resubmitting.
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <div className="grid gap-5 md:grid-cols-2">
               {employeeSummaryCards.map((card) => (
                 <article
@@ -394,6 +425,12 @@ export default function DashboardPage() {
                       <p className="mt-1 text-sm text-slate-500">
                         {trip.travelDates}
                       </p>
+                      {(trip.bookingDetails?.flight ||
+                        trip.bookingDetails?.stay) && (
+                        <p className="mt-2 text-sm font-medium text-green-700">
+                          Approved itinerary ready
+                        </p>
+                      )}
                     </article>
                   ))}
 

@@ -9,7 +9,7 @@ const navLinks = [
   { href: "/", label: "Home" },
   { href: "/book-flight", label: "Flights" },
   {
-    href: "https://ridetego.com/",
+    href: "https://ridetego.net/",
     label: "Corporate Transportation",
     external: true,
   },
@@ -23,6 +23,7 @@ export default function Navbar() {
     () => getIsLoggedIn(),
   );
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const aboutRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -45,11 +46,13 @@ export default function Navbar() {
     const handlePageShow = () => {
       syncAuthState();
       setAboutOpen(false);
+      setMobileMenuOpen(false);
     };
 
     const handleWindowFocus = () => {
       syncAuthState();
       setAboutOpen(false);
+      setMobileMenuOpen(false);
     };
 
     const handleStorage = () => {
@@ -58,6 +61,7 @@ export default function Navbar() {
 
     const handleAuthChange = () => {
       syncAuthState();
+      setMobileMenuOpen(false);
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -85,8 +89,8 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="sticky top-0 z-50 border-b-2 border-[#2537a5] bg-white">
-      <div className="flex w-full items-center justify-between gap-2 px-11 py-4 sm:px-12 lg:px-16">
+    <nav className="sticky top-0 z-50 bg-white/95 shadow-[0_10px_30px_rgba(15,23,42,0.08)] ring-1 ring-slate-900/5 backdrop-blur after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-[#2737a7]/20 after:to-transparent">
+      <div className="flex w-full items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-16">
         <Link
           href="/"
           className="shrink-0 flex items-center transition-opacity hover:opacity-90"
@@ -102,7 +106,31 @@ export default function Navbar() {
           />
         </Link>
 
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-4 lg:gap-6">
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen((open) => !open)}
+          aria-expanded={mobileMenuOpen}
+          aria-label="Toggle navigation menu"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 text-[#2737a7] transition hover:bg-slate-50 lg:hidden"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            {mobileMenuOpen ? (
+              <path d="M6 6l12 12M18 6L6 18" />
+            ) : (
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            )}
+          </svg>
+        </button>
+
+        <div className="hidden min-w-0 flex-1 items-center justify-end gap-4 lg:flex lg:gap-6">
           <div className="flex min-w-0 items-center gap-4 lg:gap-7">
             {navLinks.map((link) => (
               link.external ? (
@@ -176,7 +204,7 @@ export default function Navbar() {
                     Contact
                   </Link>
                   <a
-                    href="https://ridetego.com/"
+                    href="https://ridetego.net/"
                     className="block px-5 py-2.5 hover:bg-slate-50"
                     onClick={() => setAboutOpen(false)}
                   >
@@ -222,6 +250,100 @@ export default function Navbar() {
           </div>
         </div>
       </div>
+
+      {mobileMenuOpen && (
+        <div className="border-t border-slate-200 bg-white px-4 py-4 lg:hidden">
+          <div className="grid gap-2">
+            {navLinks.map((link) =>
+              link.external ? (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  className="rounded-xl px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-[#2737a7] transition hover:bg-slate-50"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  className="rounded-xl px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-[#2737a7] transition hover:bg-slate-50"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              ),
+            )}
+
+            <Link
+              href="/about"
+              className="rounded-xl px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-[#2737a7] transition hover:bg-slate-50"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              About Us
+            </Link>
+            <Link
+              href="/mission"
+              className="rounded-xl px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-[#2737a7] transition hover:bg-slate-50"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Our Mission
+            </Link>
+            <Link
+              href="/solutions"
+              className="rounded-xl px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-[#2737a7] transition hover:bg-slate-50"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Solutions
+            </Link>
+            <Link
+              href="/contact"
+              className="rounded-xl px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-[#2737a7] transition hover:bg-slate-50"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Contact
+            </Link>
+
+            <div className="mt-2 border-t border-slate-100 pt-2">
+              {isLoggedIn ? (
+                <div className="grid gap-2">
+                  <Link
+                    href="/dashboard"
+                    className="rounded-xl px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-[#2737a7] transition hover:bg-slate-50"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Dashboard
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="rounded-xl px-4 py-3 text-left text-sm font-semibold uppercase tracking-[0.08em] text-[#2737a7] transition hover:bg-slate-50"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  <Link
+                    href="/login"
+                    className="rounded-xl px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-[#2737a7] transition hover:bg-slate-50"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="rounded-xl bg-[#2737a7] px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#1d2d8f]"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Signup
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }

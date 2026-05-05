@@ -3,36 +3,88 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { buildUserFromLogin, saveStoredUser } from "@/lib/auth";
+import { saveStoredUser, type UserRole } from "@/lib/auth";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+
+type LoginResponse = {
+  error?: string;
+  profile?: {
+    email?: string;
+    phone?: string;
+    first_name?: string;
+    last_name?: string;
+    role?: UserRole;
+  } | null;
+};
 
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError("");
 
-    saveStoredUser(buildUserFromLogin(email));
-    window.dispatchEvent(new Event("authchange"));
+    try {
+      const response = await fetch(`${API_URL.replace(/\/$/, "")}/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+        }),
+      });
 
-    setLoading(false);
-    router.push("/dashboard");
+      const result = (await response.json()) as LoginResponse;
+
+      if (!response.ok) {
+        setError(result.error ?? "Unable to log in");
+        return;
+      }
+
+      const profile = result.profile;
+      const firstName = profile?.first_name?.trim() ?? "";
+      const lastName = profile?.last_name?.trim() ?? "";
+      const name = [firstName, lastName].filter(Boolean).join(" ");
+
+      saveStoredUser({
+        email: profile?.email ?? email.trim(),
+        phone: profile?.phone,
+        name: name || undefined,
+        role: profile?.role ?? "employee",
+      });
+
+      if (profile?.phone) {
+        localStorage.setItem("signupContact", profile.phone);
+      }
+
+      window.dispatchEvent(new Event("authchange"));
+      router.push("/dashboard");
+    } catch {
+      setError("Unable to reach the login server. Make sure the backend is running.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-white px-4">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-white px-4 py-10 sm:px-6">
       <img
         src="/tego-logo.png"
         alt="Background Logo"
-        className="absolute opacity-10 w-[1600px] max-w-none top-[60%] left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+        className="pointer-events-none absolute left-1/2 top-[60%] w-[900px] max-w-none -translate-x-1/2 -translate-y-1/2 opacity-10 sm:w-[1200px] lg:w-[1600px]"
       />
 
-      <div className="relative w-full max-w-md">
-        <h1 className="mb-6 text-center text-3xl font-semibold leading-tight text-blue-900 md:text-4xl">
+      <div className="relative w-full max-w-md rounded-[2rem] border border-slate-200/80 bg-white/95 p-6 shadow-xl backdrop-blur sm:p-8">
+        <h1 className="mb-6 text-center text-3xl font-semibold leading-tight text-blue-900 sm:text-4xl">
           Welcome back
         </h1>
 
@@ -55,6 +107,8 @@ export default function LoginPage() {
             required
           />
 
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
           <button
             type="submit"
             disabled={loading}
@@ -71,11 +125,11 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-3">
-          <button className="flex w-full items-center justify-center gap-3 rounded-xl border border-blue-200 bg-white py-4 text-lg font-medium text-blue-900 transition hover:bg-blue-50">
+          <button className="flex w-full items-center justify-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-4 text-base font-medium text-blue-900 transition hover:bg-blue-50 sm:text-lg">
             Continue with Google
           </button>
 
-          <button className="flex w-full items-center justify-center gap-3 rounded-xl border border-blue-200 bg-white py-4 text-lg font-medium text-blue-900 transition hover:bg-blue-50">
+          <button className="flex w-full items-center justify-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-4 text-base font-medium text-blue-900 transition hover:bg-blue-50 sm:text-lg">
             Continue with Apple
           </button>
         </div>
@@ -84,6 +138,11 @@ export default function LoginPage() {
           Don&apos;t have an account?{" "}
           <Link href="/signup" className="font-semibold text-blue-700">
             Sign up
+          </Link>
+        </p>
+        <p className="mt-3 text-center text-sm">
+          <Link href="/forgot-password" className="font-semibold text-blue-700">
+            Forgot your password?
           </Link>
         </p>
         <p className="mt-3 text-center text-sm text-slate-500">

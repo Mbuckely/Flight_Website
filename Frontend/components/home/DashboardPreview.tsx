@@ -15,7 +15,6 @@ function CountUp({
 
   useEffect(() => {
     if (!isActive) {
-      setCount(0);
       return;
     }
 
@@ -63,7 +62,7 @@ export default function DashboardPreview() {
   }, []);
 
   return (
-    <div ref={sectionRef} className="mt-32 px-6">
+    <div ref={sectionRef} className="mt-20 px-0 sm:mt-32 sm:px-6">
       <div className="mb-10 text-center">
         <h2 className="mb-4 text-3xl font-bold text-blue-900">
           Built for Companies
@@ -99,19 +98,19 @@ export default function DashboardPreview() {
         </div>
 
         <div className="rounded-lg bg-gray-50 p-4">
-          <div className="mb-2 flex justify-between text-sm text-gray-500">
+          <div className="mb-2 hidden justify-between text-sm text-gray-500 sm:flex">
             <span>Route</span>
             <span>Date</span>
             <span>Status</span>
           </div>
 
-          <div className="flex justify-between border-t py-2">
+          <div className="grid gap-1 border-t py-3 text-sm sm:flex sm:justify-between sm:py-2 sm:text-base">
             <span>NYC → LAX</span>
             <span>Apr 15</span>
             <span className="font-medium text-green-600">Upcoming</span>
           </div>
 
-          <div className="flex justify-between border-t py-2">
+          <div className="grid gap-1 border-t py-3 text-sm sm:flex sm:justify-between sm:py-2 sm:text-base">
             <span>ATL → MIA</span>
             <span>Mar 10</span>
             <span className="text-gray-500">Completed</span>

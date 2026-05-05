@@ -9,13 +9,27 @@ import {
   UserIcon,
 } from "@heroicons/react/24/outline";
 import FlightCard from "@/components/flights/FlightCard";
+import GooglePlaceField from "@/components/places/GooglePlaceField";
 import StaggeredReveal from "@/components/ui/StaggeredReveal";
-import { submitTravelRequest } from "@/lib/approval-requests";
+import { createApprovalRequest } from "@/lib/approval-requests";
 import { getStoredUser, isLoggedIn } from "@/lib/auth";
 import type { FlightOffer } from "@/lib/amadeus";
 
 type SearchTab = "stays" | "flights";
 type FlightTripType = "roundtrip" | "one-way" | "multi-city";
+type ManagerOption = {
+  email: string;
+  name: string;
+  role: string;
+};
+type StayOption = {
+  id: string;
+  name: string;
+  details: string;
+  price: string;
+};
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
 const topTabs: { id: SearchTab; label: string }[] = [
   { id: "stays", label: "Stays" },
@@ -98,6 +112,31 @@ function SearchField({
   );
 }
 
+function formatSelectedDates(startDate: string, endDate: string) {
+  const formatDate = (value: string) => {
+    const date = new Date(`${value}T00:00:00`);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const formattedStart = formatDate(startDate);
+  const formattedEnd = formatDate(endDate);
+
+  if (formattedStart && formattedEnd) {
+    return `${formattedStart} - ${formattedEnd}`;
+  }
+
+  return formattedStart || formattedEnd;
+}
+
 export default function BookingPage() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<SearchTab>("flights");
@@ -115,13 +154,20 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(false);
   const [flightResults, setFlightResults] = useState<FlightOffer[]>([]);
   const [showStayResults, setShowStayResults] = useState(false);
+  const [selectedFlight, setSelectedFlight] = useState<FlightOffer | null>(null);
+  const [selectedStay, setSelectedStay] = useState<StayOption | null>(null);
   const [requestNames, setRequestNames] = useState("");
   const [requestFrom, setRequestFrom] = useState("");
   const [requestTo, setRequestTo] = useState("");
-  const [requestDates, setRequestDates] = useState("");
+  const [requestStartDate, setRequestStartDate] = useState("");
+  const [requestEndDate, setRequestEndDate] = useState("");
   const [requestRooms, setRequestRooms] = useState("");
   const [requestReason, setRequestReason] = useState("");
+  const [selectedApproverEmail, setSelectedApproverEmail] = useState("");
+  const [managers, setManagers] = useState<ManagerOption[]>([]);
   const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const [requestError, setRequestError] = useState("");
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
@@ -150,6 +196,30 @@ export default function BookingPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const loadManagers = async () => {
+      try {
+        const response = await fetch(`${API_URL.replace(/\/$/, "")}/managers`);
+        const result = (await response.json()) as {
+          managers?: ManagerOption[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(result.error ?? "Unable to load approvers");
+        }
+
+        setManagers(result.managers ?? []);
+      } catch {
+        setManagers([]);
+      }
+    };
+
+    if (loggedIn) {
+      void loadManagers();
+    }
+  }, [loggedIn]);
+
   const handleFlightSearch = async () => {
     setLoading(true);
     setShowStayResults(false);
@@ -173,36 +243,100 @@ export default function BookingPage() {
     setShowStayResults(true);
   };
 
-  const handleTravelRequestSubmit = (event: React.FormEvent) => {
+  const handleTravelRequestSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setRequestSubmitted(false);
+    setRequestError("");
 
     const parsedTravelers = requestNames
       .split(",")
       .map((name) => name.trim())
       .filter(Boolean);
+    const selectedApprover = managers.find(
+      (manager) => manager.email === selectedApproverEmail,
+    );
+    const travelDates = formatSelectedDates(requestStartDate, requestEndDate);
+
+    if (
+      !requestNames.trim() ||
+      !requestFrom.trim() ||
+      !requestTo.trim() ||
+      !requestStartDate ||
+      !requestEndDate ||
+      !requestRooms.trim() ||
+      !selectedApprover
+    ) {
+      setRequestError("Please complete all request fields before sending.");
+      return;
+    }
 
     const storedUser = getStoredUser();
     const submittedBy = storedUser
       ? storedUser.name ?? storedUser.email ?? "Travel Coordinator"
       : "Travel Coordinator";
 
-    submitTravelRequest({
-      submittedBy,
-      travelers: parsedTravelers,
-      fromLocation: requestFrom,
-      toLocation: requestTo,
-      travelDates: requestDates,
-      roomRequirement: requestRooms,
-      reason: requestReason || "Employee-submitted travel request awaiting review.",
-    });
+    setIsSubmittingRequest(true);
 
-    setRequestSubmitted(true);
-    setRequestNames("");
-    setRequestFrom("");
-    setRequestTo("");
-    setRequestDates("");
-    setRequestRooms("");
-    setRequestReason("");
+    try {
+      await createApprovalRequest({
+        submittedBy,
+        approverEmail: selectedApprover.email,
+        approverName: selectedApprover.name,
+        travelers: parsedTravelers,
+        fromLocation: requestFrom,
+        toLocation: requestTo,
+        travelDates,
+        roomRequirement: requestRooms,
+        bookingDetails: {
+          ...(selectedFlight
+            ? {
+                flight: {
+                  airline: selectedFlight.airline,
+                  from: selectedFlight.from,
+                  to: selectedFlight.to,
+                  duration: selectedFlight.duration,
+                  price: selectedFlight.price,
+                },
+              }
+            : {}),
+          ...(selectedStay
+            ? {
+                stay: {
+                  name: selectedStay.name,
+                  details: selectedStay.details,
+                  price: selectedStay.price,
+                },
+              }
+            : {}),
+          requestedAddOns: [
+            ...(addFlightToStay || addStayToFlight ? ["Flight"] : []),
+            ...(addCarToStay || addCarToFlight ? ["Car"] : []),
+            ...(addStayToFlight || selectedStay ? ["Stay"] : []),
+          ],
+        },
+        reason: requestReason || "Employee-submitted travel request awaiting review.",
+      });
+
+      setRequestSubmitted(true);
+      setRequestNames("");
+      setRequestFrom("");
+      setRequestTo("");
+      setRequestStartDate("");
+      setRequestEndDate("");
+      setRequestRooms("");
+      setSelectedApproverEmail("");
+      setSelectedFlight(null);
+      setSelectedStay(null);
+      setRequestReason("");
+    } catch (err) {
+      setRequestError(
+        err instanceof Error
+          ? err.message
+          : "Unable to send this request for approval.",
+      );
+    } finally {
+      setIsSubmittingRequest(false);
+    }
   };
 
   return (
@@ -232,7 +366,7 @@ export default function BookingPage() {
             {activeTab === "stays" && (
               <section className="space-y-6">
                 <div className="grid gap-4 xl:grid-cols-[1.2fr_1.2fr_1.2fr_auto]">
-                  <SearchField
+                  <GooglePlaceField
                     icon={<MapPinIcon className="h-6 w-6" />}
                     label="Where to?"
                     value={location}
@@ -310,24 +444,81 @@ export default function BookingPage() {
                           onChange={setRequestNames}
                           placeholder="Jordan Lee, Avery Patel"
                         />
-                        <SearchField
-                          icon={<CalendarDaysIcon className="h-6 w-6" />}
-                          label="Dates"
-                          value={requestDates}
-                          onChange={setRequestDates}
-                          placeholder="Apr 18 - Apr 20"
-                        />
+                        <label className="flex items-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3">
+                          <span className="text-slate-700">
+                            <UserIcon className="h-6 w-6" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                              Approver
+                            </span>
+                            <select
+                              value={selectedApproverEmail}
+                              onChange={(event) =>
+                                setSelectedApproverEmail(event.target.value)
+                              }
+                              className="mt-1 w-full bg-transparent text-lg text-slate-900 outline-none"
+                            >
+                              <option value="">Select an approver</option>
+                              {managers.map((manager) => (
+                                <option key={manager.email} value={manager.email}>
+                                  {manager.name}
+                                </option>
+                              ))}
+                            </select>
+                          </span>
+                        </label>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="flex items-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3">
+                          <span className="text-slate-700">
+                            <CalendarDaysIcon className="h-6 w-6" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                              Start date
+                            </span>
+                            <input
+                              type="date"
+                              value={requestStartDate}
+                              onChange={(event) =>
+                                setRequestStartDate(event.target.value)
+                              }
+                              className="mt-1 w-full bg-transparent text-lg text-slate-900 outline-none"
+                            />
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3">
+                          <span className="text-slate-700">
+                            <CalendarDaysIcon className="h-6 w-6" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                              End date
+                            </span>
+                            <input
+                              type="date"
+                              value={requestEndDate}
+                              min={requestStartDate || undefined}
+                              onChange={(event) =>
+                                setRequestEndDate(event.target.value)
+                              }
+                              className="mt-1 w-full bg-transparent text-lg text-slate-900 outline-none"
+                            />
+                          </span>
+                        </label>
                       </div>
 
                       <div className="grid gap-4 md:grid-cols-3">
-                        <SearchField
+                        <GooglePlaceField
                           icon={<MapPinIcon className="h-6 w-6" />}
                           label="Leaving from"
                           value={requestFrom}
                           onChange={setRequestFrom}
                           placeholder="Chicago"
                         />
-                        <SearchField
+                        <GooglePlaceField
                           icon={<MapPinIcon className="h-6 w-6" />}
                           label="Going to"
                           value={requestTo}
@@ -342,6 +533,33 @@ export default function BookingPage() {
                           placeholder="2 rooms"
                         />
                       </div>
+
+                      {(selectedFlight || selectedStay) && (
+                        <div className="grid gap-3 rounded-2xl border border-blue-200 bg-white p-4 text-sm text-slate-700 md:grid-cols-2">
+                          {selectedFlight && (
+                            <div>
+                              <p className="font-semibold text-blue-700">
+                                Selected flight
+                              </p>
+                              <p className="mt-1">
+                                {selectedFlight.airline}: {selectedFlight.from} to{" "}
+                                {selectedFlight.to}, {selectedFlight.duration},{" "}
+                                ${selectedFlight.price}
+                              </p>
+                            </div>
+                          )}
+                          {selectedStay && (
+                            <div>
+                              <p className="font-semibold text-blue-700">
+                                Selected stay
+                              </p>
+                              <p className="mt-1">
+                                {selectedStay.name}: {selectedStay.price}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <label className="grid gap-2">
                         <span className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -359,14 +577,20 @@ export default function BookingPage() {
                       <div className="flex flex-wrap items-center gap-4">
                         <button
                           type="submit"
-                          className="rounded-2xl bg-blue-900 px-6 py-3 font-semibold text-white transition hover:bg-blue-800"
+                          disabled={isSubmittingRequest}
+                          className="rounded-2xl bg-blue-900 px-6 py-3 font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-blue-400"
                         >
-                          Send for approval
+                          {isSubmittingRequest ? "Sending..." : "Send for approval"}
                         </button>
 
                         {requestSubmitted && (
                           <p className="text-sm font-medium text-green-700">
                             Travel request submitted to approvals.
+                          </p>
+                        )}
+                        {requestError && (
+                          <p className="text-sm font-medium text-red-600">
+                            {requestError}
                           </p>
                         )}
                       </div>
@@ -408,14 +632,14 @@ export default function BookingPage() {
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-[1.1fr_1.1fr_1fr_0.9fr_auto]">
-                  <SearchField
+                  <GooglePlaceField
                     icon={<MapPinIcon className="h-6 w-6" />}
                     label="Leaving from"
                     value={from}
                     onChange={setFrom}
                     placeholder="Houston, TX (IAH)"
                   />
-                  <SearchField
+                  <GooglePlaceField
                     icon={<MapPinIcon className="h-6 w-6" />}
                     label="Going to"
                     value={to}
@@ -534,7 +758,9 @@ export default function BookingPage() {
               {stayResults.map((stay) => (
                 <article
                   key={stay.id}
-                  className="rounded-3xl bg-white p-6 shadow-sm"
+                  className={`rounded-3xl bg-white p-6 shadow-sm ${
+                    selectedStay?.id === stay.id ? "ring-2 ring-blue-700" : ""
+                  }`}
                 >
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
@@ -549,8 +775,12 @@ export default function BookingPage() {
                       <p className="text-2xl font-bold text-blue-900">
                         {stay.price}
                       </p>
-                      <button className="mt-3 rounded-xl bg-blue-700 px-4 py-2 font-semibold text-white transition hover:bg-blue-800">
-                        View stay
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStay(stay)}
+                        className="mt-3 rounded-xl bg-blue-700 px-4 py-2 font-semibold text-white transition hover:bg-blue-800"
+                      >
+                        {selectedStay?.id === stay.id ? "Selected" : "Select stay"}
                       </button>
                     </div>
                   </div>
@@ -567,7 +797,12 @@ export default function BookingPage() {
                 </div>
               ) : flightResults.length > 0 ? (
                 flightResults.map((offer) => (
-                  <FlightCard key={offer.id} flight={offer} />
+                  <FlightCard
+                    key={offer.id}
+                    flight={offer}
+                    selected={selectedFlight?.id === offer.id}
+                    onSelect={setSelectedFlight}
+                  />
                 ))
               ) : (
                 <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-slate-600">

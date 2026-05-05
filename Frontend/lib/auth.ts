@@ -1,11 +1,24 @@
 "use client";
 
-export type UserRole = "employee" | "approver";
+export type UserRole = "employee" | "approver" | "manager";
 
 export type StoredUser = {
   email?: string;
+  phone?: string;
   name?: string;
   role?: UserRole;
+};
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+
+type ProfileResponse = {
+  profile?: {
+    email?: string;
+    phone?: string;
+    first_name?: string;
+    last_name?: string;
+    role?: UserRole;
+  } | null;
 };
 
 // Temporary stand-in for backend role lookup.
@@ -28,9 +41,13 @@ export function getStoredUser(): StoredUser | null {
 
   try {
     const parsedUser = JSON.parse(storedUser) as StoredUser;
+    const role = ["approver", "manager"].includes(parsedUser.role ?? "")
+      ? parsedUser.role
+      : "employee";
+
     return {
       ...parsedUser,
-      role: parsedUser.role === "approver" ? "approver" : "employee",
+      role,
     };
   } catch {
     return null;
@@ -46,7 +63,8 @@ export function isLoggedIn() {
 }
 
 export function isApprover() {
-  return getUserRole() === "approver";
+  const role = getUserRole();
+  return role === "approver" || role === "manager";
 }
 
 export function saveStoredUser(user: StoredUser) {
@@ -56,7 +74,9 @@ export function saveStoredUser(user: StoredUser) {
 
   const nextUser: StoredUser = {
     ...user,
-    role: user.role === "approver" ? "approver" : "employee",
+    role: ["approver", "manager"].includes(user.role ?? "")
+      ? user.role
+      : "employee",
   };
 
   window.localStorage.setItem("user", JSON.stringify(nextUser));
@@ -88,4 +108,66 @@ export function buildUserFromSignup(email?: string, name?: string): StoredUser {
     name,
     role: "employee",
   };
+}
+
+export async function refreshStoredUserProfile() {
+  const currentUser = getStoredUser();
+  const email = currentUser?.email?.trim();
+
+  if (!email) {
+    return currentUser;
+  }
+
+  const response = await fetch(
+    `${API_URL.replace(/\/$/, "")}/profile?email=${encodeURIComponent(email)}`,
+  );
+
+  if (!response.ok) {
+    return currentUser;
+  }
+
+  const result = (await response.json()) as ProfileResponse;
+  const profile = result.profile;
+
+  if (!profile) {
+    return currentUser;
+  }
+
+  const firstName = profile.first_name?.trim() ?? "";
+  const lastName = profile.last_name?.trim() ?? "";
+  const name = [firstName, lastName].filter(Boolean).join(" ");
+  const fallbackUser = currentUser ?? {};
+
+  const nextUser = {
+    ...fallbackUser,
+    email: profile.email ?? fallbackUser.email,
+    phone: profile.phone ?? fallbackUser.phone,
+    name: name || fallbackUser.name,
+    role: profile.role ?? fallbackUser.role ?? "employee",
+  };
+
+  saveStoredUser(nextUser);
+  return nextUser;
+}
+
+export async function updateStoredUserProfile(input: {
+  email: string;
+  phone: string;
+  firstName?: string;
+  lastName?: string;
+}) {
+  const response = await fetch(`${API_URL.replace(/\/$/, "")}/profile`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const result = (await response.json()) as { error?: string };
+    throw new Error(result.error ?? "Unable to update profile");
+  }
+
+  return refreshStoredUserProfile();
 }

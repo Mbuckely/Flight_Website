@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import {
-  getApprovalRequests,
+  fetchApprovalRequests,
+  saveApprovalRequestUpdate,
   type ApprovalRequest,
 } from "@/lib/approval-requests";
-import { getStoredUser, isApprover } from "@/lib/auth";
+import { getStoredUser, isApprover, refreshStoredUserProfile } from "@/lib/auth";
 import {
   getTripStartDate,
   isRequestOwnedByUser,
@@ -16,9 +17,11 @@ import {
 function TripCard({
   trip,
   statusLabel,
+  onCancel,
 }: {
   trip: ApprovalRequest;
   statusLabel: string;
+  onCancel: (trip: ApprovalRequest) => void;
 }) {
   return (
     <article className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
@@ -33,9 +36,18 @@ function TripCard({
           <p className="mt-3 text-lg text-slate-600">{trip.route}</p>
         </div>
 
-        <span className="inline-flex rounded-full bg-green-50 px-4 py-2 text-sm font-semibold text-green-700">
-          Approved
-        </span>
+        <div className="flex flex-col items-start gap-3 md:items-end">
+          <span className="inline-flex rounded-full bg-green-50 px-4 py-2 text-sm font-semibold text-green-700">
+            Approved
+          </span>
+          <button
+            type="button"
+            onClick={() => onCancel(trip)}
+            className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+          >
+            Cancel Trip
+          </button>
+        </div>
       </div>
 
       <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -89,6 +101,40 @@ function TripCard({
         </div>
         <p className="mt-5 leading-7 text-slate-600">{trip.reason}</p>
       </div>
+
+      {(trip.bookingDetails?.flight ||
+        trip.bookingDetails?.stay ||
+        trip.bookingDetails?.requestedAddOns?.length) && (
+        <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-5">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-700">
+            Generated Itinerary
+          </p>
+          <div className="mt-4 grid gap-3 text-sm text-slate-700 md:grid-cols-2">
+            {trip.bookingDetails.flight && (
+              <p>
+                <span className="font-semibold text-slate-900">Flight:</span>{" "}
+                {trip.bookingDetails.flight.airline},{" "}
+                {trip.bookingDetails.flight.from} to{" "}
+                {trip.bookingDetails.flight.to},{" "}
+                {trip.bookingDetails.flight.duration}, $
+                {trip.bookingDetails.flight.price}
+              </p>
+            )}
+            {trip.bookingDetails.stay && (
+              <p>
+                <span className="font-semibold text-slate-900">Stay:</span>{" "}
+                {trip.bookingDetails.stay.name}, {trip.bookingDetails.stay.price}
+              </p>
+            )}
+            {!!trip.bookingDetails.requestedAddOns?.length && (
+              <p>
+                <span className="font-semibold text-slate-900">Add-ons:</span>{" "}
+                {trip.bookingDetails.requestedAddOns.join(", ")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -97,24 +143,26 @@ export default function TripsPage() {
   const [approvedTrips, setApprovedTrips] = useState<ApprovalRequest[]>([]);
   const [canApprove, setCanApprove] = useState(false);
 
+  const syncTrips = async () => {
+    const currentUser = await refreshStoredUserProfile();
+    const approverView = isApprover();
+    const visibleTrips = (await fetchApprovalRequests(currentUser?.email))
+      .filter((request) => request.status === "Approved")
+      .filter((request) =>
+        approverView ? true : isRequestOwnedByUser(request, currentUser),
+      );
+
+    setCanApprove(approverView);
+    setApprovedTrips(sortTripsByStartDate(visibleTrips));
+  };
+
   useEffect(() => {
-    const syncTrips = () => {
-      const currentUser = getStoredUser();
-      const approverView = isApprover();
-      const visibleTrips = getApprovalRequests()
-        .filter((request) => request.status === "Approved")
-        .filter((request) =>
-          approverView ? true : isRequestOwnedByUser(request, currentUser),
-        );
-
-      setCanApprove(approverView);
-      setApprovedTrips(sortTripsByStartDate(visibleTrips));
-    };
-
     window.addEventListener("approvalchange", syncTrips);
     window.addEventListener("authchange", syncTrips);
     window.addEventListener("focus", syncTrips);
-    syncTrips();
+    window.setTimeout(() => {
+      void syncTrips();
+    }, 0);
 
     return () => {
       window.removeEventListener("approvalchange", syncTrips);
@@ -122,6 +170,21 @@ export default function TripsPage() {
       window.removeEventListener("focus", syncTrips);
     };
   }, []);
+
+  const handleCancelTrip = async (trip: ApprovalRequest) => {
+    const currentUser = getStoredUser();
+
+    await saveApprovalRequestUpdate(
+      trip.id,
+      {
+        status: "Cancelled",
+        itineraryShared: false,
+      },
+      currentUser?.email,
+    );
+
+    await syncTrips();
+  };
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -170,7 +233,12 @@ export default function TripsPage() {
             </p>
             <div className="mt-6 grid gap-5">
               {upcomingTrips.map((trip) => (
-                <TripCard key={trip.id} trip={trip} statusLabel="Itinerary Shared" />
+                <TripCard
+                  key={trip.id}
+                  trip={trip}
+                  statusLabel="Itinerary Shared"
+                  onCancel={handleCancelTrip}
+                />
               ))}
 
               {upcomingTrips.length === 0 && (
@@ -187,7 +255,12 @@ export default function TripsPage() {
             </p>
             <div className="mt-6 grid gap-5">
               {previousTrips.map((trip) => (
-                <TripCard key={trip.id} trip={trip} statusLabel="Trip History" />
+                <TripCard
+                  key={trip.id}
+                  trip={trip}
+                  statusLabel="Trip History"
+                  onCancel={handleCancelTrip}
+                />
               ))}
 
               {previousTrips.length === 0 && (

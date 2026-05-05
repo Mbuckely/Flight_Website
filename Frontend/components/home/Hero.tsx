@@ -6,9 +6,9 @@ export default function Hero() {
   const router = useRouter();
 
   return (
-    <div className="relative min-h-[85vh] flex flex-col justify-center items-center text-center px-6 overflow-hidden">
+    <div className="relative flex min-h-[75vh] flex-col items-center justify-center overflow-hidden px-6 text-center sm:min-h-[85vh]">
 
-  {/* BACKGROUND IMAGE */}     //Put a airport background here 
+  {/* BACKGROUND IMAGE */}
   <div className="absolute inset-0 z-0">
     <img
       src="/aiport_en.jpeg" 
@@ -23,20 +23,20 @@ export default function Hero() {
   {/* CONTENT */}
   <div className="relative z-20 max-w-3xl">
 
-    <h1 className="text-6xl md:text-6xl font-bold text-white mb-6 leading-tight tracking-tight">
+    <h1 className="mb-6 text-4xl font-bold leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
   Corporate Flight Booking Made Easy
 </h1>
 
-<p className="text-xl md:text-2xl text-gray-200 mb-10 max-w-2xl mx-auto leading-relaxed">
+<p className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-gray-200 sm:text-xl lg:text-2xl">
   Book flights, manage employee travel, and streamline company logistics all in one powerful platform.
 </p>
 
-<div className="flex justify-center gap-6 flex-wrap">
+<div className="flex flex-wrap justify-center gap-4 sm:gap-6">
 
   {/* GET STARTED */}
   <button
     onClick={() => router.push("/login")}
-    className="bg-red-600 text-white px-8 py-4 text- rounded-xl hover:bg-red-700 hover:scale-105 transition duration-200 shadow-lg focus:outline-none"
+    className="rounded-xl bg-red-600 px-6 py-3 text-base text-white shadow-lg transition duration-200 hover:scale-105 hover:bg-red-700 focus:outline-none sm:px-8 sm:py-4 sm:text-lg"
   >
     Get Started
   </button>
@@ -44,7 +44,7 @@ export default function Hero() {
   {/* LEARN MORE */}
   <button
     onClick={() => router.push("/about")}
-    className="border border-white text-white px-8 py-4 text-lg rounded-xl hover:bg-white/10 hover:scale-105 transition duration-200 focus:outline-none"
+    className="rounded-xl border border-white px-6 py-3 text-base text-white transition duration-200 hover:scale-105 hover:bg-white/10 focus:outline-none sm:px-8 sm:py-4 sm:text-lg"
   >
     Learn More
   </button>

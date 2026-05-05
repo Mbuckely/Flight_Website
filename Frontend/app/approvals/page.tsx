@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import {
-  getApprovalRequests,
-  updateApprovalRequest,
+  fetchApprovalRequests,
+  saveApprovalRequestUpdate,
   type ApprovalRequest,
 } from "@/lib/approval-requests";
 import { getStoredUser, isApprover } from "@/lib/auth";
@@ -19,6 +19,7 @@ export default function ApprovalsPage() {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [hasAccess, setHasAccess] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [savedApprovalId, setSavedApprovalId] = useState<string | null>(null);
 
   useEffect(() => {
     const syncAccess = () => {
@@ -33,8 +34,9 @@ export default function ApprovalsPage() {
       setIsReady(true);
     };
 
-    const syncApprovals = () => {
-      setApprovals(getApprovalRequests());
+    const syncApprovals = async () => {
+      const currentUser = getStoredUser();
+      setApprovals(await fetchApprovalRequests(currentUser?.email));
     };
 
     window.addEventListener("authchange", syncAccess);
@@ -110,19 +112,36 @@ export default function ApprovalsPage() {
     );
   };
 
-  const handleSave = (approval: ApprovalRequest) => {
-    updateApprovalRequest(approval.id, approval);
+  const handleSave = async (approval: ApprovalRequest) => {
+    const currentUser = getStoredUser();
+    const nextApprovals = await saveApprovalRequestUpdate(
+      approval.id,
+      approval,
+      currentUser?.email,
+    );
+    setApprovals(nextApprovals);
+    setSavedApprovalId(approval.id);
+    window.setTimeout(() => {
+      setSavedApprovalId((current) =>
+        current === approval.id ? null : current,
+      );
+    }, 2000);
   };
 
   const handleStatusChange = (
     approval: ApprovalRequest,
     status: ApprovalRequest["status"],
   ) => {
-    updateApprovalRequest(approval.id, {
-      ...approval,
-      status,
-      itineraryShared: status === "Approved",
-    });
+    const currentUser = getStoredUser();
+    void saveApprovalRequestUpdate(
+      approval.id,
+      {
+        ...approval,
+        status,
+        itineraryShared: status === "Approved",
+      },
+      currentUser?.email,
+    ).then(setApprovals);
   };
 
   return (
@@ -182,6 +201,12 @@ export default function ApprovalsPage() {
                 </div>
               </div>
 
+              {savedApprovalId === approval.id && (
+                <p className="mt-4 text-sm font-medium text-green-700">
+                  Changes saved.
+                </p>
+              )}
+
               <div className="mt-8 grid gap-4 md:grid-cols-2">
                 <label className="grid gap-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
@@ -202,6 +227,21 @@ export default function ApprovalsPage() {
                   </span>
                   <input
                     value={approval.submittedBy}
+                    readOnly
+                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600 outline-none"
+                  />
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+                    Approver
+                  </span>
+                  <input
+                    value={
+                      approval.approverName ??
+                      approval.approverEmail ??
+                      "Unassigned"
+                    }
                     readOnly
                     className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600 outline-none"
                   />
@@ -289,6 +329,47 @@ export default function ApprovalsPage() {
                     className="rounded-2xl border border-slate-200 px-4 py-3 text-slate-900 outline-none"
                   />
                 </label>
+
+                {(approval.bookingDetails?.flight ||
+                  approval.bookingDetails?.stay ||
+                  approval.bookingDetails?.requestedAddOns?.length) && (
+                  <section className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+                      Requested itinerary
+                    </p>
+                    <div className="mt-3 grid gap-3 text-sm text-slate-700 md:grid-cols-2">
+                      {approval.bookingDetails.flight && (
+                        <p>
+                          <span className="font-semibold text-slate-900">
+                            Flight:
+                          </span>{" "}
+                          {approval.bookingDetails.flight.airline},{" "}
+                          {approval.bookingDetails.flight.from} to{" "}
+                          {approval.bookingDetails.flight.to},{" "}
+                          {approval.bookingDetails.flight.duration}, $
+                          {approval.bookingDetails.flight.price}
+                        </p>
+                      )}
+                      {approval.bookingDetails.stay && (
+                        <p>
+                          <span className="font-semibold text-slate-900">
+                            Stay:
+                          </span>{" "}
+                          {approval.bookingDetails.stay.name},{" "}
+                          {approval.bookingDetails.stay.price}
+                        </p>
+                      )}
+                      {!!approval.bookingDetails.requestedAddOns?.length && (
+                        <p>
+                          <span className="font-semibold text-slate-900">
+                            Add-ons:
+                          </span>{" "}
+                          {approval.bookingDetails.requestedAddOns.join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                )}
 
                 <label className="grid gap-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">

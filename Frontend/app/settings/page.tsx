@@ -3,7 +3,23 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
-import { getStoredUser, saveStoredUser } from "@/lib/auth";
+import {
+  getStoredUser,
+  saveStoredUser,
+  updateStoredUserProfile,
+} from "@/lib/auth";
+
+function formatRole(role?: string) {
+  if (role === "manager") {
+    return "Manager";
+  }
+
+  if (role === "approver") {
+    return "Approver";
+  }
+
+  return "Employee";
+}
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -36,6 +52,7 @@ export default function SettingsPage() {
     return storedContact && !storedContact.includes("@") ? storedContact : "";
   });
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -45,18 +62,36 @@ export default function SettingsPage() {
     }
   }, [router]);
 
-  const handleSave = (event: React.FormEvent) => {
+  const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     const currentUser = getStoredUser();
+    setMessage("");
+    setError("");
 
-    saveStoredUser({
-      ...(currentUser ?? {}),
-      email,
-      role: currentUser?.role ?? "employee",
-    });
-    localStorage.setItem("signupContact", phone || email);
-    window.dispatchEvent(new Event("authchange"));
-    setMessage("Settings updated.");
+    if (!email.trim() || !phone.trim()) {
+      setError("Email and phone are required.");
+      return;
+    }
+
+    try {
+      await updateStoredUserProfile({
+        email,
+        phone,
+        firstName: currentUser?.name?.split(" ")[0],
+        lastName: currentUser?.name?.split(" ").slice(1).join(" "),
+      });
+      localStorage.setItem("signupContact", phone || email);
+      window.dispatchEvent(new Event("authchange"));
+      setMessage("Settings updated.");
+    } catch (err) {
+      saveStoredUser({
+        ...(currentUser ?? {}),
+        email,
+        phone,
+        role: currentUser?.role ?? "employee",
+      });
+      setError(err instanceof Error ? err.message : "Unable to update settings.");
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -118,7 +153,7 @@ export default function SettingsPage() {
               <label className="grid gap-2">
                 <span className="font-medium text-slate-800">Account Role</span>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-slate-700">
-                  {getStoredUser()?.role === "approver" ? "Approver" : "Employee"}
+                  {formatRole(getStoredUser()?.role)}
                 </div>
                 <p className="text-sm text-slate-500">
                   Role access is managed by your backend account record.
@@ -136,6 +171,11 @@ export default function SettingsPage() {
               {message && (
                 <p className="self-center text-sm font-medium text-green-700">
                   {message}
+                </p>
+              )}
+              {error && (
+                <p className="self-center text-sm font-medium text-red-600">
+                  {error}
                 </p>
               )}
             </div>

@@ -1,13 +1,11 @@
-import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
-
 export default function RideTegoSection() {
   return (
-    <div className="mt-32">
+    <div className="mt-20 sm:mt-32">
 
       {/* Background Section */}
-      <div className="bg-gradient-to-r from-[#1e3a8a] to-[#0f172a] text-white py-20 px-6">
+      <div className="overflow-hidden bg-gradient-to-r from-[#1e3a8a] to-[#0f172a] px-6 py-16 text-white sm:py-20">
 
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 items-center">
+        <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-2 md:items-center">
 
           {/* LEFT SIDE TEXT */}
           <div>
@@ -15,23 +13,23 @@ export default function RideTegoSection() {
               Corporate Mobility Solution
             </p>
 
-            <h2 className="text-5xl font-bold mb-4">
+            <h2 className="mb-4 text-3xl font-bold sm:text-4xl lg:text-5xl">
               RideTego Ground Transportation
             </h2>
 
-            <p className="text-xl text-gray-300 mb-6">
+            <p className="mb-6 text-lg text-gray-300 sm:text-xl">
               Need reliable transportation to and from the airport? RideTego
               provides seamless, on demand rides for corporate travelers,
               ensuring punctuality, comfort, and efficiency for every trip.
             </p>
 
-            <p className="text-lg text-gray-400 mb-8">
+            <p className="mb-8 text-base text-gray-400 sm:text-lg">
               From airport pickups to city travel, RideTego connects your team
               to their destinations so your business never slows down.
             </p>
 
             {/* APP BUTTONS */}
-           <div className="flex gap-6 items-center">
+           <div className="flex flex-wrap items-center gap-4 sm:gap-6">
 
   {/* GOOGLE PLAY */}
   <a
@@ -70,12 +68,12 @@ export default function RideTegoSection() {
 
           {/* RIGHT SIDE MOCK PHONE */}
 
-          <div className="relative flex justify-end items-end h-[500px]">
+          <div className="relative flex h-[360px] items-end justify-center sm:h-[420px] md:justify-end lg:h-[500px]">
 
 
 
   {/* Glow */}
-  <div className="absolute right-10 bottom-10 w-80 h-80 bg-blue-500 blur-3xl opacity-20 rounded-full"></div>
+  <div className="absolute -bottom-4 right-1/2 h-56 w-56 translate-x-1/2 rounded-full bg-blue-500 opacity-20 blur-3xl md:right-10 md:bottom-10 md:translate-x-0 md:h-80 md:w-80"></div>
 
   {/* PHONE IMAGE */}
   <img
@@ -83,8 +81,8 @@ export default function RideTegoSection() {
     alt="RideTego App"
     className="
       relative
-      w-[390px] md:w-[440px]
-      translate-y-20
+      w-[255px] sm:w-[300px] md:w-[380px] lg:w-[440px]
+      translate-y-20 sm:translate-y-12 md:translate-y-16 lg:translate-y-20
       drop-shadow-2xl
       transition duration-300
     "

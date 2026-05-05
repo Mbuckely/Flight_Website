@@ -19,22 +19,22 @@ const aboutCards = [
 
 export default function AboutPage() {
   return (
-    <div className="min-h-screen bg-white px-6 py-20">
+    <div className="min-h-screen bg-white px-6 py-14 sm:py-20">
 
       {/* HERO SECTION */}
       <div className="max-w-5xl mx-auto text-center">
-        <h1 className="text-5xl font-bold text-blue-900 mb-6 tracking-tight">
+        <h1 className="mb-6 text-4xl font-bold tracking-tight text-blue-900 sm:text-5xl">
           About RideTego
         </h1>
 
-        <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+        <p className="mx-auto max-w-3xl text-lg leading-relaxed text-gray-600 sm:text-xl">
           RideTego is a modern corporate travel platform built to simplify how
           organizations manage flights, transportation, and employee travel at scale.
         </p>
       </div>
 
       {/* FEATURE GRID */}
-      <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 mt-20">
+      <div className="mx-auto mt-14 grid max-w-6xl gap-6 sm:mt-20 md:grid-cols-2 md:gap-10">
         {aboutCards.map((card, index) => (
           <div
             key={card.title}
@@ -54,8 +54,8 @@ export default function AboutPage() {
       </div>
 
       {/* CTA SECTION */}
-      <div className="max-w-4xl mx-auto text-center mt-24">
-        <h2 className="text-3xl font-semibold text-blue-900 mb-4">
+      <div className="mx-auto mt-20 max-w-4xl text-center sm:mt-24">
+        <h2 className="mb-4 text-2xl font-semibold text-blue-900 sm:text-3xl">
           Ready to streamline your corporate travel?
         </h2>
 
