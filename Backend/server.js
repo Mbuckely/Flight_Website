@@ -1030,27 +1030,27 @@ app.get(
         return res.status(400).json({ error: error.message });
       }
 
+      const normalizedProfiles = profiles ?? [];
       const authUsers = await listAllAuthUsers();
-      const profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
+      const profilesById = new Map(normalizedProfiles.map((profile) => [profile.id, profile]));
       const profilesByEmail = new Map(
-        (profiles ?? []).map((profile) => [normalizeEmail(profile.email), profile]),
+        normalizedProfiles.map((profile) => [normalizeEmail(profile.email), profile]),
       );
-      const seenProfileIds = new Set();
-      const mergedUsers = authUsers.map((authUser) => {
-        const profile =
-          profilesById.get(authUser.id) ??
-          profilesByEmail.get(normalizeEmail(authUser.email));
+      const mergedUsers = normalizedProfiles.map(toManagedUser);
+      const mergedUserKeys = new Set(
+        normalizedProfiles.flatMap((profile) => [
+          `id:${profile.id}`,
+          `email:${normalizeEmail(profile.email)}`,
+        ]),
+      );
 
-        if (profile) {
-          seenProfileIds.add(profile.id);
-        }
+      authUsers.forEach((authUser) => {
+        const hasProfile =
+          mergedUserKeys.has(`id:${authUser.id}`) ||
+          mergedUserKeys.has(`email:${normalizeEmail(authUser.email)}`);
 
-        return toManagedUserFromAuthUser(authUser, profile);
-      });
-
-      (profiles ?? []).forEach((profile) => {
-        if (!seenProfileIds.has(profile.id)) {
-          mergedUsers.push(toManagedUser(profile));
+        if (!hasProfile) {
+          mergedUsers.push(toManagedUserFromAuthUser(authUser, null));
         }
       });
 
@@ -1160,7 +1160,12 @@ app.patch(
         .maybeSingle();
 
       if (error) {
-        return res.status(400).json({ error: error.message });
+        const message =
+          !targetProfile && error.message.toLowerCase().includes("row-level security")
+            ? "This Auth user is missing a profile row. Have them sign up through the app, or add a matching row in public.profiles."
+            : error.message;
+
+        return res.status(400).json({ error: message });
       }
 
       if (!updatedProfile) {
