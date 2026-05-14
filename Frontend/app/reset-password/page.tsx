@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+import { getApiUrl } from "@/lib/api-url";
 
 type ResetPasswordResponse = {
   error?: string;
@@ -50,7 +49,7 @@ export default function ResetPasswordPage() {
     }
 
     try {
-      const response = await fetch(`${API_URL.replace(/\/$/, "")}/reset-password`, {
+      const response = await fetch(`${getApiUrl()}/reset-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

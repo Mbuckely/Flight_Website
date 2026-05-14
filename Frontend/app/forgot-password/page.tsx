@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+import { getApiUrl } from "@/lib/api-url";
 
 type ForgotPasswordResponse = {
   error?: string;
@@ -23,7 +22,7 @@ export default function ForgotPasswordPage() {
     setError("");
 
     try {
-      const response = await fetch(`${API_URL.replace(/\/$/, "")}/forgot-password`, {
+      const response = await fetch(`${getApiUrl()}/forgot-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

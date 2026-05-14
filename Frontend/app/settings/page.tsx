@@ -10,6 +10,10 @@ import {
 } from "@/lib/auth";
 
 function formatRole(role?: string) {
+  if (role === "admin") {
+    return "Admin";
+  }
+
   if (role === "manager") {
     return "Manager";
   }

@@ -48,6 +48,19 @@ function getPreviousTrips(trips: ApprovalRequest[]) {
   });
 }
 
+function getRequestSpend(request: ApprovalRequest) {
+  const flightSpend = request.bookingDetails?.flight?.price ?? 0;
+  const staySpend =
+    request.bookingDetails?.stay?.priceValue ??
+    Number(
+      request.bookingDetails?.stay?.price
+        ?.replace(/[^0-9.]/g, "")
+        .trim() || 0,
+    );
+
+  return flightSpend + staySpend;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
@@ -64,7 +77,7 @@ export default function DashboardPage() {
     const syncDashboard = async () => {
       const currentUser = await refreshStoredUserProfile();
       const role = currentUser?.role;
-      const canUserApprove = role === "approver" || role === "manager";
+      const canUserApprove = role === "approver" || role === "manager" || role === "admin";
 
       setCanApprove(canUserApprove);
       setUserName(
@@ -103,6 +116,17 @@ export default function DashboardPage() {
   const changesRequested = approvalRequests.filter(
     (request) => request.status === "Changes Requested",
   );
+  const approvedSpend = approvedTrips.reduce(
+    (total, request) => total + getRequestSpend(request),
+    0,
+  );
+  const closedRequests = approvalRequests.filter((request) =>
+    ["Approved", "Changes Requested", "Cancelled"].includes(request.status),
+  );
+  const complianceRate =
+    closedRequests.length > 0
+      ? Math.round((approvedTrips.length / closedRequests.length) * 100)
+      : 0;
   const visibleTrips = canApprove
     ? sortTripsByStartDate(approvedTrips)
     : sortTripsByStartDate(
@@ -126,16 +150,20 @@ export default function DashboardPage() {
     },
     {
       label: "Monthly Spend",
-      value: 18420,
+      value: approvedSpend,
       prefix: "$",
       separator: ",",
-      note: "4% under projected travel budget",
+      note: approvedSpend
+        ? "Based on approved flight and hotel selections"
+        : "No approved itinerary spend yet",
     },
     {
       label: "Traveler Compliance",
-      value: 92,
+      value: complianceRate,
       suffix: "%",
-      note: "Up 6% from last month",
+      note: closedRequests.length
+        ? "Approved requests out of closed requests"
+        : "No closed requests to calculate yet",
     },
   ];
 

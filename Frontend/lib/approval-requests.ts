@@ -1,3 +1,5 @@
+import { getApiUrl } from "@/lib/api-url";
+
 export type ApprovalStatus =
   | "Pending"
   | "Finance Review"
@@ -30,6 +32,11 @@ export type ApprovalRequest = {
       name: string;
       details: string;
       price: string;
+      priceValue?: number;
+      pricePerNight?: string;
+      checkInTime?: string;
+      checkOutTime?: string;
+      rating?: number;
     };
     requestedAddOns?: string[];
   };
@@ -52,7 +59,6 @@ export type TravelRequestInput = {
   reason: string;
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 const STORAGE_KEY = "approvalRequests";
 
 const seedApprovalRequests: ApprovalRequest[] = [
@@ -218,7 +224,7 @@ export async function fetchApprovalRequests(email?: string) {
   try {
     const query = new URLSearchParams({ email });
     const response = await fetch(
-      `${API_URL.replace(/\/$/, "")}/approval-requests?${query.toString()}`,
+      `${getApiUrl()}/approval-requests?${query.toString()}`,
     );
     const result = await parseApiResponse<{ requests: ApprovalRequest[] }>(response);
     saveApprovalRequests(result.requests);
@@ -229,7 +235,7 @@ export async function fetchApprovalRequests(email?: string) {
 }
 
 export async function createApprovalRequest(input: TravelRequestInput) {
-  const response = await fetch(`${API_URL.replace(/\/$/, "")}/approval-requests`, {
+  const response = await fetch(`${getApiUrl()}/approval-requests`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -247,7 +253,7 @@ export async function saveApprovalRequestUpdate(
   actorEmail?: string,
 ) {
   const response = await fetch(
-    `${API_URL.replace(/\/$/, "")}/approval-requests/${encodeURIComponent(id)}`,
+    `${getApiUrl()}/approval-requests/${encodeURIComponent(id)}`,
     {
       method: "PATCH",
       headers: {

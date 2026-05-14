@@ -1,15 +1,16 @@
 "use client";
 
-export type UserRole = "employee" | "approver" | "manager";
+import { getApiUrl } from "@/lib/api-url";
+
+export type UserRole = "employee" | "approver" | "manager" | "admin";
 
 export type StoredUser = {
   email?: string;
   phone?: string;
   name?: string;
   role?: UserRole;
+  accessToken?: string;
 };
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
 type ProfileResponse = {
   profile?: {
@@ -41,7 +42,7 @@ export function getStoredUser(): StoredUser | null {
 
   try {
     const parsedUser = JSON.parse(storedUser) as StoredUser;
-    const role = ["approver", "manager"].includes(parsedUser.role ?? "")
+    const role = ["approver", "manager", "admin"].includes(parsedUser.role ?? "")
       ? parsedUser.role
       : "employee";
 
@@ -62,9 +63,18 @@ export function isLoggedIn() {
   return !!getStoredUser();
 }
 
+export function getStoredAccessToken() {
+  return getStoredUser()?.accessToken ?? "";
+}
+
 export function isApprover() {
   const role = getUserRole();
-  return role === "approver" || role === "manager";
+  return role === "approver" || role === "manager" || role === "admin";
+}
+
+export function canManageUsers() {
+  const role = getUserRole();
+  return role === "manager" || role === "admin";
 }
 
 export function saveStoredUser(user: StoredUser) {
@@ -74,7 +84,7 @@ export function saveStoredUser(user: StoredUser) {
 
   const nextUser: StoredUser = {
     ...user,
-    role: ["approver", "manager"].includes(user.role ?? "")
+    role: ["approver", "manager", "admin"].includes(user.role ?? "")
       ? user.role
       : "employee",
   };
@@ -119,7 +129,7 @@ export async function refreshStoredUserProfile() {
   }
 
   const response = await fetch(
-    `${API_URL.replace(/\/$/, "")}/profile?email=${encodeURIComponent(email)}`,
+    `${getApiUrl()}/profile?email=${encodeURIComponent(email)}`,
   );
 
   if (!response.ok) {
@@ -156,7 +166,7 @@ export async function updateStoredUserProfile(input: {
   firstName?: string;
   lastName?: string;
 }) {
-  const response = await fetch(`${API_URL.replace(/\/$/, "")}/profile`, {
+  const response = await fetch(`${getApiUrl()}/profile`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",

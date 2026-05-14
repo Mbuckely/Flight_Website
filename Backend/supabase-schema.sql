@@ -3,7 +3,7 @@ drop constraint if exists profiles_role_check;
 
 alter table profiles
 add constraint profiles_role_check
-check (role in ('employee', 'approver', 'manager'));
+check (role in ('employee', 'approver', 'manager', 'admin'));
 
 create table if not exists approval_requests (
   id text primary key,

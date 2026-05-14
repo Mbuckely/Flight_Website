@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { getApiUrl } from "@/lib/api-url";
 import { saveStoredUser, type UserRole } from "@/lib/auth";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -60,7 +59,7 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const response = await fetch(`${API_URL.replace(/\/$/, "")}/signup`, {
+      const response = await fetch(`${getApiUrl()}/signup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -140,6 +139,7 @@ export default function SignupPage() {
 
             <button
               type="submit"
+              onClick={handleContinue}
               className="w-full rounded-xl bg-red-600 py-4 text-lg font-medium text-white transition hover:bg-red-700"
             >
               Continue
@@ -219,11 +219,19 @@ export default function SignupPage() {
         </div>
 
         <div className="space-y-3">
-          <button className="flex w-full items-center justify-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-4 text-base font-medium text-blue-900 transition hover:bg-blue-50 sm:text-lg">
+          <button
+            type="button"
+            disabled
+            className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl border border-blue-200 bg-slate-50 px-4 py-4 text-base font-medium text-slate-400 sm:text-lg"
+          >
             Continue with Google
           </button>
 
-          <button className="flex w-full items-center justify-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-4 text-base font-medium text-blue-900 transition hover:bg-blue-50 sm:text-lg">
+          <button
+            type="button"
+            disabled
+            className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl border border-blue-200 bg-slate-50 px-4 py-4 text-base font-medium text-slate-400 sm:text-lg"
+          >
             Continue with Apple
           </button>
         </div>

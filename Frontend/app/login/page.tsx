@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { saveStoredUser, type UserRole } from "@/lib/auth";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+import { getApiUrl } from "@/lib/api-url";
 
 type LoginResponse = {
   error?: string;
+  session?: {
+    access_token?: string;
+  } | null;
   profile?: {
     email?: string;
     phone?: string;
@@ -32,7 +34,7 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const response = await fetch(`${API_URL.replace(/\/$/, "")}/login`, {
+      const response = await fetch(`${getApiUrl()}/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -60,6 +62,7 @@ export default function LoginPage() {
         phone: profile?.phone,
         name: name || undefined,
         role: profile?.role ?? "employee",
+        accessToken: result.session?.access_token,
       });
 
       if (profile?.phone) {
@@ -67,7 +70,8 @@ export default function LoginPage() {
       }
 
       window.dispatchEvent(new Event("authchange"));
-      router.push("/dashboard");
+      const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+      router.push(returnTo?.startsWith("/") ? returnTo : "/dashboard");
     } catch {
       setError("Unable to reach the login server. Make sure the backend is running.");
     } finally {
@@ -125,11 +129,19 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-3">
-          <button className="flex w-full items-center justify-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-4 text-base font-medium text-blue-900 transition hover:bg-blue-50 sm:text-lg">
+          <button
+            type="button"
+            disabled
+            className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl border border-blue-200 bg-slate-50 px-4 py-4 text-base font-medium text-slate-400 sm:text-lg"
+          >
             Continue with Google
           </button>
 
-          <button className="flex w-full items-center justify-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-4 text-base font-medium text-blue-900 transition hover:bg-blue-50 sm:text-lg">
+          <button
+            type="button"
+            disabled
+            className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl border border-blue-200 bg-slate-50 px-4 py-4 text-base font-medium text-slate-400 sm:text-lg"
+          >
             Continue with Apple
           </button>
         </div>

@@ -8,6 +8,8 @@ type GooglePlaceFieldProps = {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  predictionTypes?: string[];
+  countries?: string | string[];
 };
 
 type PlacePrediction = {
@@ -37,6 +39,64 @@ declare global {
 }
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+const DEFAULT_PREDICTION_TYPES = ["(regions)"];
+const fallbackDestinations = [
+  "New York, New York, United States",
+  "Los Angeles, California, United States",
+  "Chicago, Illinois, United States",
+  "Houston, Texas, United States",
+  "Miami, Florida, United States",
+  "Orlando, Florida, United States",
+  "Atlanta, Georgia, United States",
+  "Dallas, Texas, United States",
+  "Seattle, Washington, United States",
+  "San Francisco, California, United States",
+  "Boston, Massachusetts, United States",
+  "Las Vegas, Nevada, United States",
+  "Denver, Colorado, United States",
+  "Washington, District of Columbia, United States",
+  "London, England, United Kingdom",
+  "Manchester, England, United Kingdom",
+  "Paris, Ile-de-France, France",
+  "Rome, Lazio, Italy",
+  "Milan, Lombardy, Italy",
+  "Barcelona, Catalonia, Spain",
+  "Madrid, Community of Madrid, Spain",
+  "Amsterdam, North Holland, Netherlands",
+  "Berlin, Germany",
+  "Munich, Bavaria, Germany",
+  "Tokyo, Japan",
+  "Osaka, Japan",
+  "Seoul, South Korea",
+  "Singapore",
+  "Bangkok, Thailand",
+  "Dubai, United Arab Emirates",
+  "Toronto, Ontario, Canada",
+  "Vancouver, British Columbia, Canada",
+  "Montreal, Quebec, Canada",
+  "Mexico City, Mexico",
+  "Cancun, Quintana Roo, Mexico",
+  "Sydney, New South Wales, Australia",
+  "Melbourne, Victoria, Australia",
+  "Sao Paulo, Brazil",
+  "Rio de Janeiro, Brazil",
+];
+
+function getFallbackPredictions(input: string) {
+  const normalizedInput = input.trim().toLowerCase();
+
+  if (normalizedInput.length < 2) {
+    return [];
+  }
+
+  return fallbackDestinations
+    .filter((destination) => destination.toLowerCase().includes(normalizedInput))
+    .slice(0, 6)
+    .map((destination) => ({
+      description: destination,
+      place_id: `fallback-${destination}`,
+    }));
+}
 
 function loadGoogleMapsScript() {
   if (typeof window === "undefined" || !GOOGLE_MAPS_API_KEY) {
@@ -81,6 +141,8 @@ export default function GooglePlaceField({
   value,
   onChange,
   placeholder,
+  predictionTypes = DEFAULT_PREDICTION_TYPES,
+  countries,
 }: GooglePlaceFieldProps) {
   const listboxId = useId();
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
@@ -120,8 +182,9 @@ export default function GooglePlaceField({
 
   useEffect(() => {
     const service = serviceRef.current;
+    const fallbackPredictions = getFallbackPredictions(value);
 
-    if (!service || value.trim().length < 2) {
+    if (value.trim().length < 2) {
       window.setTimeout(() => setPredictions([]), 0);
       return;
     }
@@ -129,19 +192,27 @@ export default function GooglePlaceField({
     let cancelled = false;
 
     const loadPredictions = async () => {
+      if (!service) {
+        setPredictions(fallbackPredictions);
+        return;
+      }
+
       try {
         const response = await service.getPlacePredictions({
           input: value,
-          types: ["geocode"],
-          componentRestrictions: { country: "us" },
+          types: predictionTypes,
+          ...(countries ? { componentRestrictions: { country: countries } } : {}),
         });
 
         if (!cancelled) {
-          setPredictions(response.predictions ?? []);
+          const googlePredictions = response.predictions ?? [];
+          setPredictions(
+            googlePredictions.length > 0 ? googlePredictions : fallbackPredictions,
+          );
         }
       } catch {
         if (!cancelled) {
-          setPredictions([]);
+          setPredictions(fallbackPredictions);
         }
       }
     };
@@ -154,7 +225,7 @@ export default function GooglePlaceField({
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [value]);
+  }, [countries, predictionTypes, value]);
 
   return (
     <div className="relative">

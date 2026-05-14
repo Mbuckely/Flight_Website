@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getStoredUser, isApprover } from "@/lib/auth";
+import { canManageUsers, getStoredUser, isApprover } from "@/lib/auth";
 
 const quickActions = [
   { href: "/book-flight", label: "Book Flight" },
   { href: "/book-flight?tab=stays", label: "Book Stay" },
   { href: "/approvals", label: "Approvals" },
+  { href: "/admin/users", label: "Users" },
   { href: "/trips", label: "View Trips" },
 ];
 
@@ -41,11 +42,13 @@ function formatWelcomeName() {
 export default function Sidebar() {
   const [welcomeName, setWelcomeName] = useState("Traveler");
   const [canViewApprovals, setCanViewApprovals] = useState(false);
+  const [canViewUsers, setCanViewUsers] = useState(false);
 
   useEffect(() => {
     const syncWelcomeName = () => {
       setWelcomeName(formatWelcomeName());
       setCanViewApprovals(isApprover());
+      setCanViewUsers(canManageUsers());
     };
 
     window.addEventListener("authchange", syncWelcomeName);
@@ -82,8 +85,16 @@ export default function Sidebar() {
         <div />
 
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
-          {quickActions.map((action) =>
-            action.href === "/approvals" && !canViewApprovals ? null : (
+          {quickActions.map((action) => {
+            if (action.href === "/approvals" && !canViewApprovals) {
+              return null;
+            }
+
+            if (action.href === "/admin/users" && !canViewUsers) {
+              return null;
+            }
+
+            return (
               <Link
                 key={`${action.href}-${action.label}`}
                 href={action.href}
@@ -91,8 +102,8 @@ export default function Sidebar() {
               >
                 {action.label}
               </Link>
-            ),
-          )}
+            );
+          })}
         </div>
 
         <Link
