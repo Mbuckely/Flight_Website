@@ -1,11 +1,5 @@
 import { NextResponse } from "next/server";
-
-function getBackendApiUrl() {
-  return (
-    process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ??
-    "http://localhost:5000"
-  );
-}
+import { getBackendApiUrl } from "../_utils/backend-api";
 
 export async function GET(request: Request) {
   const { search } = new URL(request.url);

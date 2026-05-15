@@ -179,7 +179,7 @@ Authentication pages.
 
 ## 6. Role System
 
-The app uses three main roles:
+The app uses three main active roles:
 
 ```txt
 employee
@@ -198,6 +198,49 @@ But the current idea is:
 - `manager` means approver.
 - `admin` controls the system.
 - `employee` submits travel requests.
+
+### Where Roles Come From
+
+Roles are stored in Supabase, in the `public.profiles` table.
+
+The important column is:
+
+```txt
+profiles.role
+```
+
+Supabase Auth stores the login account. The `profiles` table stores app-specific user information, including the role.
+
+Every real app user should have both:
+
+```txt
+Supabase Auth user
+public.profiles row with the same id
+```
+
+The `profiles.id` value should match the Supabase Auth user id.
+
+### Default Role
+
+New users are created as employees by default.
+
+During signup:
+
+1. The backend creates the Supabase Auth user.
+2. The backend creates a matching row in `public.profiles`.
+3. The backend saves `role = 'employee'`.
+
+That means users do not choose their own role during signup.
+
+### How Login Uses Roles
+
+During login, the backend checks the user's email/password with Supabase Auth.
+
+Then it loads that user's profile from `public.profiles`.
+
+The frontend saves the returned profile role locally and uses it to decide what pages and actions the user can see.
+
+If a role changes while the user is already logged in, they may need to log out and log back in so the browser gets the latest role.
 
 ### Employee
 
@@ -236,8 +279,14 @@ Admins can:
 
 - See all users
 - Change roles between employee, manager, and admin
+- Promote employees to managers
+- Demote managers back to employees
+- Promote users to admins
+- Demote admins, except the backend protects against removing the last admin
 - See approval tools
 - Manage the system
+
+Admins should be the only users who can freely assign any role.
 
 The Users page is here:
 
@@ -257,6 +306,42 @@ Look for:
 GET /admin/users
 PATCH /admin/users/:id/role
 ```
+
+### User Access Page Rules
+
+The User Access page shows users from Supabase.
+
+The backend combines:
+
+- rows from `public.profiles`
+- users from Supabase Auth
+
+If an Auth user is missing a matching `profiles` row, the app cannot reliably save their role. That is why the schema includes a backfill and trigger to keep Auth users and profiles connected.
+
+### Common Role Problem
+
+If the app says:
+
+```txt
+This Auth user is missing a profile row.
+```
+
+it means the user exists in Supabase Auth, but the backend could not find or create a matching row in `public.profiles`.
+
+The universal fix is in:
+
+```txt
+Backend/supabase-schema.sql
+```
+
+That schema:
+
+- adds the allowed role check
+- gives `profiles.role` a default of `employee`
+- backfills missing profile rows for existing Auth users
+- creates a trigger so future Auth users automatically get profile rows
+
+After running the schema in Supabase SQL Editor, restart the backend so the running API uses the current database state.
 
 ## 7. How To Make The First Admin
 
@@ -644,6 +729,48 @@ admin
 
 The older role `approver` may still exist for compatibility, but the current system treats `manager` as the approver role.
 
+### Auth Users And Profiles Must Match
+
+Every user should have:
+
+```txt
+auth.users.id = public.profiles.id
+```
+
+If those values do not match, the app may show a user from Auth but fail when saving their role.
+
+This can happen when a user is created directly in the Supabase Auth dashboard instead of signing up through the app.
+
+The schema file includes a universal fix:
+
+```txt
+Backend/supabase-schema.sql
+```
+
+It backfills missing profile rows and creates this trigger:
+
+```txt
+create_profile_after_auth_signup
+```
+
+That trigger automatically creates a `public.profiles` row whenever a new Supabase Auth user is created.
+
+To confirm Auth users and profiles are connected, run this in Supabase SQL Editor:
+
+```sql
+select
+  auth.users.id,
+  auth.users.email,
+  profiles.id as profile_id,
+  profiles.role
+from auth.users
+left join public.profiles
+  on profiles.id = auth.users.id
+order by auth.users.email;
+```
+
+Every real app user should have a non-empty `profile_id`.
+
 ### Approval Requests Table
 
 Travel requests are stored in:
@@ -754,6 +881,37 @@ The backend updates the `profiles.role` value in Supabase.
 That means when someone is promoted to manager, the change is saved in the database.
 
 After they log out and log back in, the app recognizes their new role.
+
+Role changes are saved by this backend route:
+
+```txt
+PATCH /admin/users/:id/role
+```
+
+Rules enforced by the backend:
+
+- admins can assign `employee`, `manager`, or `admin`
+- managers can promote non-admin employees to manager
+- managers cannot create admins
+- managers cannot demote admins
+- the backend prevents removing the last admin
+
+If Supabase shows the correct role but the web app still shows an old role, restart the backend and refresh the app. The running server may still have stale state or may be connected to an older environment.
+
+Backend environment file:
+
+```txt
+Backend/.env
+```
+
+Important values:
+
+```env
+SUPABASE_URL=your-supabase-project-url
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` must be the service role key, not the anon key.
 
 ### Important Supabase SQL
 

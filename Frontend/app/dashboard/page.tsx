@@ -9,7 +9,12 @@ import {
   fetchApprovalRequests,
   type ApprovalRequest,
 } from "@/lib/approval-requests";
-import { getStoredUser, refreshStoredUserProfile } from "@/lib/auth";
+import {
+  fetchApprovalAnalytics,
+  type ApprovalAnalyticsRange,
+  type ApprovalAnalyticsResponse,
+} from "@/lib/approval-analytics";
+import { getStoredUser, refreshStoredUserProfile, type UserRole } from "@/lib/auth";
 import {
   getTripStartDate,
   isRequestOwnedByUser,
@@ -66,6 +71,13 @@ export default function DashboardPage() {
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
   const [canApprove, setCanApprove] = useState(false);
   const [userName, setUserName] = useState("Traveler");
+  const [userRole, setUserRole] = useState<UserRole>("employee");
+  const [analyticsRange, setAnalyticsRange] =
+    useState<ApprovalAnalyticsRange>("month");
+  const [managerFilter, setManagerFilter] = useState("");
+  const [approvalAnalytics, setApprovalAnalytics] =
+    useState<ApprovalAnalyticsResponse | null>(null);
+  const [analyticsError, setAnalyticsError] = useState("");
 
   useEffect(() => {
     const user = localStorage.getItem("user");
@@ -80,6 +92,7 @@ export default function DashboardPage() {
       const canUserApprove = role === "approver" || role === "manager" || role === "admin";
 
       setCanApprove(canUserApprove);
+      setUserRole(role ?? "employee");
       setUserName(
         currentUser?.name?.trim() ||
           currentUser?.email?.split("@")[0] ||
@@ -93,6 +106,26 @@ export default function DashboardPage() {
 
       const requests = await fetchApprovalRequests(currentUser.email);
       setApprovalRequests(requests);
+
+      if (role === "manager" || role === "admin") {
+        try {
+          const analytics = await fetchApprovalAnalytics(
+            analyticsRange,
+            role === "admin" ? managerFilter : undefined,
+          );
+          setApprovalAnalytics(analytics);
+          setAnalyticsError("");
+        } catch (error) {
+          setApprovalAnalytics(null);
+          setAnalyticsError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load approval analytics.",
+          );
+        }
+      } else {
+        setApprovalAnalytics(null);
+      }
     };
 
     window.addEventListener("approvalchange", syncDashboard);
@@ -105,7 +138,7 @@ export default function DashboardPage() {
       window.removeEventListener("authchange", syncDashboard);
       window.removeEventListener("focus", syncDashboard);
     };
-  }, [router]);
+  }, [router, analyticsRange, managerFilter]);
 
   const pendingApprovals = approvalRequests.filter(
     (request) => request.status !== "Approved",
@@ -136,6 +169,17 @@ export default function DashboardPage() {
       );
   const upcomingTrips = getUpcomingTrips(visibleTrips);
   const previousTrips = getPreviousTrips(visibleTrips);
+  const canViewApprovalAnalytics =
+    userRole === "manager" || userRole === "admin";
+  const analyticsSpend = approvalAnalytics?.totalSpend ?? 0;
+  const analyticsApprovedCount = approvalAnalytics?.approvedCount ?? 0;
+  const analyticsAverageTripCost = approvalAnalytics?.averageTripCost ?? 0;
+  const largestManagerSpend = Math.max(
+    ...((approvalAnalytics?.managerTotals ?? []).map(
+      (manager) => manager.totalSpend,
+    )),
+    1,
+  );
 
   const approverSummaryCards = [
     {
@@ -149,13 +193,13 @@ export default function DashboardPage() {
       note: "Open requests currently waiting for review",
     },
     {
-      label: "Monthly Spend",
-      value: approvedSpend,
+      label: "Approved Spend",
+      value: analyticsSpend || approvedSpend,
       prefix: "$",
       separator: ",",
-      note: approvedSpend
-        ? "Based on approved flight and hotel selections"
-        : "No approved itinerary spend yet",
+      note: approvalAnalytics
+        ? `Approved trip spend for this ${analyticsRange}`
+        : "Based on approved flight and hotel selections",
     },
     {
       label: "Traveler Compliance",
@@ -211,6 +255,192 @@ export default function DashboardPage() {
                 </article>
               ))}
             </div>
+
+            {canViewApprovalAnalytics && (
+            <section className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-700">
+                    Approval Analytics
+                  </p>
+                  <h2 className="mt-2 text-3xl font-bold text-slate-900">
+                    Approved trip spend by period
+                  </h2>
+                  <p className="mt-3 max-w-3xl leading-7 text-slate-600">
+                    {userRole === "admin"
+                      ? "Admins can see all manager approvals and filter down to one manager."
+                      : "Managers only see the trips they approved."}
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Period
+                    </span>
+                    <select
+                      value={analyticsRange}
+                      onChange={(event) =>
+                        setAnalyticsRange(
+                          event.target.value as ApprovalAnalyticsRange,
+                        )
+                      }
+                      className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500"
+                    >
+                      <option value="week">This week</option>
+                      <option value="month">This month</option>
+                      <option value="quarter">This quarter</option>
+                    </select>
+                  </label>
+
+                  {userRole === "admin" && (
+                    <label className="grid gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Manager
+                      </span>
+                      <select
+                        value={managerFilter}
+                        onChange={(event) => setManagerFilter(event.target.value)}
+                        className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500"
+                      >
+                        <option value="">All managers</option>
+                        {(approvalAnalytics?.managerOptions ?? []).map(
+                          (manager) => (
+                            <option key={manager.email} value={manager.email}>
+                              {manager.name}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {analyticsError && (
+                <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                  {analyticsError}
+                </div>
+              )}
+
+              <div className="mt-8 grid gap-4 md:grid-cols-3">
+                <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Approved Spend
+                  </p>
+                  <p className="mt-3 text-3xl font-bold text-slate-900">
+                    $
+                    <CountUp
+                      end={analyticsSpend}
+                      duration={1.4}
+                      separator=","
+                      decimals={analyticsSpend % 1 ? 2 : 0}
+                    />
+                  </p>
+                </article>
+
+                <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Approved Trips
+                  </p>
+                  <p className="mt-3 text-3xl font-bold text-slate-900">
+                    <CountUp end={analyticsApprovedCount} duration={1.4} />
+                  </p>
+                </article>
+
+                <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Average Trip Cost
+                  </p>
+                  <p className="mt-3 text-3xl font-bold text-slate-900">
+                    $
+                    <CountUp
+                      end={analyticsAverageTripCost}
+                      duration={1.4}
+                      separator=","
+                      decimals={analyticsAverageTripCost % 1 ? 2 : 0}
+                    />
+                  </p>
+                </article>
+              </div>
+
+              <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_1fr]">
+                <div className="rounded-2xl border border-slate-200 p-5">
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-700">
+                    Spend Visual
+                  </p>
+                  <div className="mt-5 grid gap-4">
+                    {(approvalAnalytics?.managerTotals ?? []).map((manager) => (
+                      <div key={manager.email} className="grid gap-2">
+                        <div className="flex items-center justify-between gap-4 text-sm">
+                          <span className="font-semibold text-slate-900">
+                            {manager.name}
+                          </span>
+                          <span className="font-semibold text-slate-700">
+                            ${manager.totalSpend.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full bg-blue-700"
+                            style={{
+                              width: `${Math.max(
+                                (manager.totalSpend / largestManagerSpend) * 100,
+                                manager.totalSpend ? 8 : 0,
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+
+                    {(approvalAnalytics?.managerTotals ?? []).length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-600">
+                        No approved trip spend is recorded for this period yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 p-5">
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-700">
+                    Recent Approved Trips
+                  </p>
+                  <div className="mt-5 grid gap-3">
+                    {(approvalAnalytics?.trips ?? []).slice(0, 4).map((trip) => (
+                      <article
+                        key={trip.id}
+                        className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              {trip.title}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {trip.route}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                              {trip.approvedByName}
+                            </p>
+                          </div>
+                          <span className="font-bold text-slate-900">
+                            ${trip.totalPrice.toLocaleString()}
+                          </span>
+                        </div>
+                      </article>
+                    ))}
+
+                    {(approvalAnalytics?.trips ?? []).length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-600">
+                        Approved trips will appear here once a request is approved.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+            )}
 
             <div className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
               <section className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">

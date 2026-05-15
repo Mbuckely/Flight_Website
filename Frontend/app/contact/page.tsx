@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ScrollReveal from "@/components/ui/ScrollReveal";
 
 const contactDetails = [
@@ -30,8 +30,24 @@ export default function ContactPage() {
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+    setName("");
+    setEmail("");
+    setCompany("");
+    setMessage("");
     setSubmitted(true);
   };
+
+  useEffect(() => {
+    if (!submitted) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSubmitted(false);
+    }, 3500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [submitted]);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-blue-50 px-6 py-20">

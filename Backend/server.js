@@ -549,6 +549,63 @@ function buildRoute(fromLocation, toLocation) {
   return `${normalizeText(fromLocation)} to ${normalizeText(toLocation)}`;
 }
 
+function parseMoneyValue(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value !== "string") {
+    return 0;
+  }
+
+  const parsed = Number(value.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function calculateBookingTotal(bookingDetails = {}) {
+  const flightSpend = parseMoneyValue(bookingDetails.flight?.price);
+  const staySpend =
+    parseMoneyValue(bookingDetails.stay?.priceValue) ||
+    parseMoneyValue(bookingDetails.stay?.price);
+
+  return Math.round((flightSpend + staySpend) * 100) / 100;
+}
+
+function getProfileDisplayName(profile) {
+  return normalizeText(`${profile?.first_name ?? ""} ${profile?.last_name ?? ""}`);
+}
+
+function getAnalyticsWindow(range) {
+  const normalizedRange = ["week", "month", "quarter"].includes(range)
+    ? range
+    : "month";
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+
+  if (normalizedRange === "quarter") {
+    const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+    start.setMonth(quarterStartMonth, 1);
+  } else if (normalizedRange === "month") {
+    start.setDate(1);
+  } else {
+    const day = start.getDay();
+    const daysSinceMonday = day === 0 ? 6 : day - 1;
+    start.setDate(start.getDate() - daysSinceMonday);
+  }
+
+  return {
+    start,
+    end: now,
+    range: normalizedRange,
+  };
+}
+
+function isDateInWindow(value, start, end) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) && date >= start && date <= end;
+}
+
 function toApprovalRequest(row) {
   return {
     id: row.id,
@@ -567,6 +624,10 @@ function toApprovalRequest(row) {
     status: row.status,
     requestedAt: row.requested_at,
     itineraryShared: row.itinerary_shared,
+    approvedAt: row.approved_at,
+    approvedByEmail: row.approved_by_email,
+    approvedByName: row.approved_by_name,
+    approvedTotalPrice: Number(row.approved_total_price ?? 0),
   };
 }
 
@@ -619,6 +680,24 @@ function toApprovalUpdateRow(input, existingRequest) {
   }
 
   return row;
+}
+
+function applyApprovalTracking(updates, existingRequest, profile) {
+  if (updates.status !== "Approved") {
+    return updates;
+  }
+
+  const bookingDetails = updates.booking_details ?? existingRequest.booking_details ?? {};
+  const approvedAt = existingRequest.approved_at ?? new Date().toISOString();
+  const approverName = getProfileDisplayName(profile) || normalizeEmail(profile?.email);
+
+  return {
+    ...updates,
+    approved_at: approvedAt,
+    approved_by_email: normalizeEmail(profile?.email),
+    approved_by_name: approverName,
+    approved_total_price: calculateBookingTotal(bookingDetails),
+  };
 }
 
 async function getProfileByEmail(email) {
@@ -1289,7 +1368,11 @@ app.patch("/approval-requests/:id", async (req, res) => {
       return res.status(403).json({ error: "This request is assigned to another approver" });
     }
 
-    const updates = toApprovalUpdateRow(req.body, existingRequest);
+    const updates = applyApprovalTracking(
+      toApprovalUpdateRow(req.body, existingRequest),
+      existingRequest,
+      profile,
+    );
 
     const { data, error } = await supabase
       .from("approval_requests")
@@ -1308,6 +1391,143 @@ app.patch("/approval-requests/:id", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+/********************************************************************************************/
+/* APPROVAL ANALYTICS ROUTES */
+/********************************************************************************************/
+
+app.get(
+  "/analytics/approvals",
+  requireAuthenticatedUser,
+  requireRoleManager,
+  async (req, res) => {
+    try {
+      const { start, end, range } = getAnalyticsWindow(req.query.range);
+      const requestedManagerEmail = normalizeEmail(req.query.managerEmail);
+
+      const { data, error } = await supabase
+        .from("approval_requests")
+        .select("*")
+        .eq("status", "Approved")
+        .order("approved_at", { ascending: false, nullsFirst: false });
+
+      if (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      const actorEmail = normalizeEmail(req.profile.email);
+      const isAdmin = req.profile.role === "admin";
+      const managerFilter = isAdmin ? requestedManagerEmail : actorEmail;
+      const rows = data ?? [];
+      const actorVisibleRows = rows.filter((row) => {
+        const approvedAt = row.approved_at ?? row.updated_at ?? row.created_at;
+        const approverEmail = normalizeEmail(row.approved_by_email ?? row.approver_email);
+
+        if (!isDateInWindow(approvedAt, start, end)) {
+          return false;
+        }
+
+        if (!isAdmin && approverEmail !== actorEmail) {
+          return false;
+        }
+
+        return true;
+      });
+      const managerOptions = new Map();
+
+      actorVisibleRows.forEach((row) => {
+        const request = toApprovalRequest(row);
+        const email = normalizeEmail(request.approvedByEmail ?? request.approverEmail);
+        const name =
+          normalizeText(request.approvedByName) ||
+          normalizeText(request.approverName) ||
+          email;
+
+        if (email) {
+          managerOptions.set(email, { email, name });
+        }
+      });
+
+      const visibleRows = actorVisibleRows.filter((row) => {
+        const approverEmail = normalizeEmail(row.approved_by_email ?? row.approver_email);
+        return !managerFilter || approverEmail === managerFilter;
+      });
+
+      const managerTotals = new Map();
+      const trips = visibleRows.map((row) => {
+        const request = toApprovalRequest(row);
+        const approvedAt = request.approvedAt ?? row.updated_at ?? row.created_at;
+        const approvedByEmail = normalizeEmail(
+          request.approvedByEmail ?? request.approverEmail,
+        );
+        const approvedByName =
+          normalizeText(request.approvedByName) ||
+          normalizeText(request.approverName) ||
+          approvedByEmail;
+        const totalPrice =
+          parseMoneyValue(request.approvedTotalPrice) ||
+          calculateBookingTotal(request.bookingDetails);
+
+        const currentTotal = managerTotals.get(approvedByEmail) ?? {
+          email: approvedByEmail,
+          name: approvedByName,
+          totalSpend: 0,
+          approvedCount: 0,
+          averageTripCost: 0,
+        };
+
+        currentTotal.totalSpend += totalPrice;
+        currentTotal.approvedCount += 1;
+        currentTotal.averageTripCost =
+          currentTotal.approvedCount > 0
+            ? currentTotal.totalSpend / currentTotal.approvedCount
+            : 0;
+        managerTotals.set(approvedByEmail, currentTotal);
+
+        return {
+          id: request.id,
+          title: request.title,
+          route: request.route,
+          travelDates: request.travelDates,
+          submittedBy: request.submittedBy,
+          travelers: request.travelers,
+          approvedAt,
+          approvedByEmail,
+          approvedByName,
+          totalPrice,
+        };
+      });
+
+      const totalSpend = trips.reduce((total, trip) => total + trip.totalPrice, 0);
+      const managerTotalsList = [...managerTotals.values()]
+        .map((manager) => ({
+          ...manager,
+          totalSpend: Math.round(manager.totalSpend * 100) / 100,
+          averageTripCost: Math.round(manager.averageTripCost * 100) / 100,
+        }))
+        .sort((first, second) => second.totalSpend - first.totalSpend);
+
+      res.set("Cache-Control", "no-store");
+      return res.json({
+        range,
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        totalSpend: Math.round(totalSpend * 100) / 100,
+        approvedCount: trips.length,
+        averageTripCost:
+          trips.length > 0 ? Math.round((totalSpend / trips.length) * 100) / 100 : 0,
+        managerOptions: [...managerOptions.values()].sort((first, second) =>
+          first.name.localeCompare(second.name),
+        ),
+        managerTotals: managerTotalsList,
+        trips,
+      });
+    } catch (err) {
+      console.error("Approval analytics error:", err);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
 
 /********************************************************************************************/
 /* SIGNUP ROUTE */

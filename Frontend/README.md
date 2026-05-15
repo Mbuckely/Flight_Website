@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RideTEGO Frontend
 
-## Getting Started
+This is the Next.js app for the RideTEGO flight website.
 
-First, run the development server:
+## Run It
 
-```bash
+```powershell
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Folder Map
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Folder | Purpose |
+| --- | --- |
+| `app` | Next.js routes, pages, layouts, and frontend API proxy routes. See `app/README.md`. |
+| `components` | Reusable UI components grouped by feature. See `components/README.md`. |
+| `lib` | API helpers, auth helpers, data mappers, and shared types. See `lib/README.md`. |
+| `public` | Static image assets served by Next.js. |
 
-## Learn More
+## Important Commands
 
-To learn more about Next.js, take a look at the following resources:
+```powershell
+npm run dev
+npm run build
+npm run lint
+npx tsc --noEmit
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create `Frontend/.env.local`:
 
-## Deploy on Vercel
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your-google-maps-browser-key
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## API Flow
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Browser pages call `app/api/*` proxy routes, those proxy routes call the Express backend in `../Backend`, and the backend handles SearchAPI/Supabase work.

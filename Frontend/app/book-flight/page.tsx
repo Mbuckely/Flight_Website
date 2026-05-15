@@ -195,6 +195,18 @@ function getFlightDepartureValue(flight: FlightOffer) {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
+function getFlightRequestRoute(flight: FlightOffer) {
+  const firstSegment = flight.segments[0];
+  const outboundArrivalSegment =
+    flight.segments.find((segment) => segment.arrivalId === flight.to) ??
+    flight.segments[flight.segments.length - 1];
+
+  return {
+    departure: firstSegment?.departureAirport || flight.from,
+    arrival: outboundArrivalSegment?.arrivalAirport || flight.to,
+  };
+}
+
 function sortFlights(flights: FlightOffer[], sortBy: FlightSortOption) {
   return [...flights].sort((first, second) => {
     switch (sortBy) {
@@ -744,7 +756,11 @@ function BookingPageContent() {
 
     try {
       const flight = JSON.parse(pendingFlightSelection) as FlightOffer;
+      const route = getFlightRequestRoute(flight);
+
       setSelectedFlight(flight);
+      setRequestFrom(route.departure);
+      setRequestTo(route.arrival);
       setFlightResults((current) =>
         current.some((offer) => offer.id === flight.id)
           ? current
@@ -1255,20 +1271,22 @@ function BookingPageContent() {
     return parsedDate.toISOString().split("T")[0];
   };
 
-  const populateRequestFromFlight = (flight: FlightOffer) => {
+  const populateRequestFromFlight = (
+    flight: FlightOffer,
+    options: { overwriteRoute?: boolean } = {},
+  ) => {
     const firstSegment = flight.segments[0];
     const finalSegment = flight.segments[flight.segments.length - 1];
+    const route = getFlightRequestRoute(flight);
 
-    setRequestFieldIfEmpty(
-      requestFrom,
-      setRequestFrom,
-      firstSegment?.departureAirport || flight.from,
-    );
-    setRequestFieldIfEmpty(
-      requestTo,
-      setRequestTo,
-      finalSegment?.arrivalAirport || flight.to,
-    );
+    if (options.overwriteRoute) {
+      setRequestFrom(route.departure);
+      setRequestTo(route.arrival);
+    } else {
+      setRequestFieldIfEmpty(requestFrom, setRequestFrom, route.departure);
+      setRequestFieldIfEmpty(requestTo, setRequestTo, route.arrival);
+    }
+
     setRequestFieldIfEmpty(
       requestStartDate,
       setRequestStartDate,
@@ -1339,7 +1357,7 @@ function BookingPageContent() {
 
     setSelectedFlight(completedFlight);
     setIsSelectingReturnFlight(false);
-    populateRequestFromFlight(completedFlight);
+    populateRequestFromFlight(completedFlight, { overwriteRoute: true });
 
     if (addStayToFlight && !selectedStay) {
       setShowStayResults(true);

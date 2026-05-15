@@ -44,6 +44,10 @@ export type ApprovalRequest = {
   status: ApprovalStatus;
   requestedAt: string;
   itineraryShared: boolean;
+  approvedAt?: string;
+  approvedByEmail?: string;
+  approvedByName?: string;
+  approvedTotalPrice?: number;
 };
 
 export type TravelRequestInput = {

@@ -9,7 +9,7 @@ const aboutCards = [
   },
   {
     title: "Why RideTego",
-    body: "We combine real-time data, intuitive workflows, and enterprise-grade reliability to help organizations reduce costs and improve travel efficiency.",
+    body: "We combine real time data, intuitive workflows, and enterprise-grade reliability to help organizations reduce costs and improve travel efficiency.",
   },
   {
     title: "Our Vision",
